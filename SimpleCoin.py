@@ -45,16 +45,59 @@ class Blockchain:
                 return False
         return True
 
+def generate_SimpleCoins_for_all_users():
+    block = Block(1,["admin","Kamil",1],1,block_chain.last_block.block_hash)
+    block_chain.add_block(block,block.calcuate_block_hash())
+    block = Block(1,["admin","Zofia",2],1,block_chain.last_block.block_hash)
+    block_chain.add_block(block,block.calcuate_block_hash())
+    block = Block(1,["admin","Piotr",3],1,block_chain.last_block.block_hash)
+    block_chain.add_block(block,block.calcuate_block_hash())
+    block = Block(1,["admin","Ala",4],1,block_chain.last_block.block_hash)
+    block_chain.add_block(block,block.calcuate_block_hash())
+    block = Block(1,["admin","Ola",5],1,block_chain.last_block.block_hash)
+    block_chain.add_block(block,block.calcuate_block_hash())
+    print("Generation completed!")
+
+def new_transaction(address_from,address_to,coin_number):
+    if block_chain.check_integrity():
+        anti_double_spending = 0
+        for i in range(1,len(block_chain.chain)):
+            if block_chain.chain[i].block_content["transaction_list"][1] == address_from and block_chain.chain[i].block_content["transaction_list"][2] == coin_number:
+                anti_double_spending = anti_double_spending + 1
+            if block_chain.chain[i].block_content["transaction_list"][0] == address_from and block_chain.chain[i].block_content["transaction_list"][2] == coin_number:
+                anti_double_spending = anti_double_spending - 1
+        if anti_double_spending == 1 and address_from != address_to:
+            block = Block(1,[address_from,address_to,coin_number],1,block_chain.last_block.block_hash)
+            block_chain.add_block(block,block.calcuate_block_hash())
+            print("Transaction from " + address_from + " to " + address_to + " was successful!")
+        if anti_double_spending != 1 and address_from != address_to:
+            print(address_from + ", you don't have coin number: " + str(coin_number))
+        if address_from == address_to:
+            print(address_from + ", you can't send coin to yourself!")
+    else:
+        print("No chain integrity!")
+
+def check_balance(person):
+    balance = 0
+    for i in range(1,len(block_chain.chain)):
+        if block_chain.chain[i].block_content["transaction_list"][1] == person:
+            balance = balance + 1
+    for i in range(1,len(block_chain.chain)):
+        if block_chain.chain[i].block_content["transaction_list"][0] == person:
+            balance = balance - 1
+    print(person + "'s balance is " + str(balance) + " SC!")
+    return balance
+
 block_chain = Blockchain()
-block1 = Block(1, ["11", "2"], 1, block_chain.last_block.block_hash)
-block_chain.add_block(block1, block1.calcuate_block_hash())
-
-block2 = Block(1, ["11", "2"], 1, block_chain.last_block.block_hash)
-block_chain.add_block(block2, block2.calcuate_block_hash())
-
-print("--------------------------------------------------------------")
-print("Is blockchain valid: \t\t\t" + str(block_chain.check_integrity()))
-print("--------------------------------------------------------------")
-block_chain.chain[1].block_content["transaction_list"] = ["Changed list"]
-print("Is blockchain after modification valid: " + str(block_chain.check_integrity()))
-print("--------------------------------------------------------------")
+generate_SimpleCoins_for_all_users()
+new_transaction("Kamil","Zofia",1)
+check_balance("Kamil")
+check_balance("Zofia")
+new_transaction("Zofia","Kamil",1)
+check_balance("Kamil")
+check_balance("Zofia")
+new_transaction("Zofia","Kamil",1)
+check_balance("Kamil")
+check_balance("Zofia")
+new_transaction("Kamil","Kamil",1)
+check_balance("Kamil")
