@@ -95,18 +95,18 @@ class Blockchain:
             if self.current_transactions[i]["sender"] == transaction["sender"] and self.current_transactions[i]["coin_id"] == transaction["coin_id"]:
                 does_have_coin_id = False
         if does_have_coin_id:
-            print("Transaction: Coin " + str(transaction["coin_id"]) + ", from " + str(transaction["sender"]) +
+            print("Transaction: Coin with ID " + str(transaction["coin_id"]) + ", from " + str(transaction["sender"]) +
                   " to " + str(transaction["recipient"]) + " was successful!")
         else:
             print("You (ID: " + str(transaction["sender"]) +
-                  ") don't have coin number: " + str(transaction["coin_id"]))
+                  ") don't have coin with ID: " + str(transaction["coin_id"]))
         return does_have_coin_id
 
     def check_balance(self, user_id):
         coin_ids = set()
         for i in range(1, len(self.chain)):
             transaction_list_in_loop = self.chain[i].block_content["transaction_list"]
-            for j in range(1, len(transaction_list_in_loop)):
+            for j in range(0, len(transaction_list_in_loop)):
                 if transaction_list_in_loop[j]["recipient"] == user_id:
                     coin_ids.add(transaction_list_in_loop[j]["coin_id"])
                 elif transaction_list_in_loop[j]["sender"] == user_id:
@@ -117,7 +117,7 @@ class Blockchain:
             elif transaction_list_in_loop[j]["sender"] == user_id:
                 coin_ids.discard(transaction_list_in_loop[j]["coin_id"])
         balance = len(coin_ids)
-        print("Selected user (ID: " + str(user_id) + ") own's " + str(balance) +
+        print("Selected user (ID: " + str(user_id) + ") owns " + str(balance) +
               " SimpleCoin(s): " + str(sorted(coin_ids)))
         return coin_ids
 
