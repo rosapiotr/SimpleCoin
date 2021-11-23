@@ -103,24 +103,20 @@ class Blockchain:
         return does_have_coin_id
 
     def check_balance(self, user_id):
-        balance = 0
         coin_ids = set()
         for i in range(1, len(self.chain)):
             transaction_list_in_loop = self.chain[i].block_content["transaction_list"]
             for j in range(1, len(transaction_list_in_loop)):
                 if transaction_list_in_loop[j]["recipient"] == user_id:
                     coin_ids.add(transaction_list_in_loop[j]["coin_id"])
-                    balance += 1
                 elif transaction_list_in_loop[j]["sender"] == user_id:
                     coin_ids.discard(transaction_list_in_loop[j]["coin_id"])
-                    balance -= 1
         for i in range(0, len(self.current_transactions)):
             if transaction_list_in_loop[j]["recipient"] == user_id:
                 coin_ids.add(transaction_list_in_loop[j]["coin_id"])
-                balance += 1
             elif transaction_list_in_loop[j]["sender"] == user_id:
                 coin_ids.discard(transaction_list_in_loop[j]["coin_id"])
-                balance -= 1
+        balance = len(coin_ids)
         print("Selected user (ID: " + str(user_id) + ") own's " + str(balance) +
               " SimpleCoin(s): " + str(sorted(coin_ids)))
         return coin_ids
