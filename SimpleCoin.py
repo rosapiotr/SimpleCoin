@@ -23,7 +23,7 @@ class Blockchain:
     def __init__(self):
         self.chain = []
         self.current_transactions = []
-        self.users = []
+        self.wallets = []
         self.create_first_block()
         self.initiateResources()
 
@@ -63,29 +63,34 @@ class Blockchain:
                 return False
         return True
 
-    def add_user(self, user):
-        self.users.append(user)
+    def add_wallet(self, wallet):
+        self.wallets.append(wallet)
 
     def new_transaction(self, sender_public_key, sender_private_key, recipient_public_key, coin_id):
-        signature, message = self.sign_message(sender_private_key)
         transaction = {
             'sender': sender_public_key,
             'recipient': recipient_public_key,
-            'coin_id': coin_id,
-            "signature": signature.decode(),
-            "message": message
+            'coin_id': coin_id
         }
+        transaction["signature"] = self.sign_transaction(transaction, sender_private_key)
         if self.validate_transaction(transaction):
             self.current_transactions.append(transaction)
             return True
         return False
 
     def validate_transaction(self, transaction):
-        public_key = (base64.b64decode(transaction["sender"])).hex()
-        signature = base64.b64decode(transaction["signature"])
+        transaction_copy = transaction.copy()
+        public_key = (base64.b64decode(transaction_copy["sender"])).hex()
+        signature_encoded = transaction_copy.pop("signature", None)
+        if signature_encoded is None:
+            print("The transaction is not signed")
+            return False
+        signature = base64.b64decode(transaction_copy["signature"])
+        transaction_copy_bytes = self.transaction_to_bytes(transaction_copy)
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(public_key), curve=ecdsa.SECP256k1)
 
-        if not vk.verify(signature, transaction["message"].encode()):
+        if not vk.verify(transaction_copy_bytes, signature, public_key):
+            print("Signature does not match the transaction")
             return False
         if transaction["sender"] == transaction["recipient"]:
             print("You can't send coin to yourself!")
@@ -112,41 +117,44 @@ class Blockchain:
                   ") don't have coin with ID: " + str(transaction["coin_id"]))
         return does_have_coin_id
 
-    def check_balance(self, user_id):
+    def check_balance(self, wallet_public_key):
         coin_ids = set()
         for i in range(1, len(self.chain)):
             transaction_list_in_loop = self.chain[i].block_content["transaction_list"]
             for j in range(0, len(transaction_list_in_loop)):
-                if transaction_list_in_loop[j]["recipient"] == user_id:
+                if transaction_list_in_loop[j]["recipient"] == wallet_public_key:
                     coin_ids.add(transaction_list_in_loop[j]["coin_id"])
-                elif transaction_list_in_loop[j]["sender"] == user_id:
+                elif transaction_list_in_loop[j]["sender"] == wallet_public_key:
                     coin_ids.discard(transaction_list_in_loop[j]["coin_id"])
         for i in range(0, len(self.current_transactions)):
-            if transaction_list_in_loop[j]["recipient"] == user_id:
+            if transaction_list_in_loop[j]["recipient"] == wallet_public_key:
                 coin_ids.add(transaction_list_in_loop[j]["coin_id"])
-            elif transaction_list_in_loop[j]["sender"] == user_id:
+            elif transaction_list_in_loop[j]["sender"] == wallet_public_key:
                 coin_ids.discard(transaction_list_in_loop[j]["coin_id"])
         balance = len(coin_ids)
-        print("Selected user (ID: " + str(user_id) + ") owns " + str(balance) +
+        print("Selected wallet (ID: " + str(wallet_public_key) + ") owns " + str(balance) +
               " SimpleCoin(s): " + str(sorted(coin_ids)))
         return coin_ids
 
-    def sign_message(self,private_key):
-        message = str(round(time.time()))
-        bmessage = message.encode()
+    def transaction_to_bytes(self, transaction):
+        return json.dumps(transaction, sort_keys=True).encode()
+
+    def sign_transaction(self, transaction, private_key):
+        print(transaction)
+        transaction_bytes = self.transaction_to_bytes(transaction)
         sk = ecdsa.SigningKey.from_string(bytes.fromhex(private_key), curve=ecdsa.SECP256k1)
-        signature = base64.b64encode(sk.sign(bmessage))
-        return signature, message
+        signature = base64.b64encode(sk.sign(transaction_bytes))
+        return signature
 
-    def create_sample_users(self):
-        userKamil = User("Kamil")
-        userPiotr = User("Piotr")
-        userZofia = User("Zofia")
-        self.add_user(userKamil)
-        self.add_user(userPiotr)
-        self.add_user(userZofia)
+    def create_sample_wallets(self):
+        walletKamil = Wallet("Kamil")
+        walletPiotr = Wallet("Piotr")
+        walletZofia = Wallet("Zofia")
+        self.add_wallet(walletKamil)
+        self.add_wallet(walletPiotr)
+        self.add_wallet(walletZofia)
 
-    def generate_SimpleCoins_for_all_users(self):
+    def generate_SimpleCoins_for_all_wallets(self):
         initialTransaction1 = {
             "sender": 0,
             "recipient": 1,     # Kamil
@@ -168,26 +176,18 @@ class Blockchain:
         print("Generation completed!")
 
     def initiateResources(self):
-        self.create_sample_users()
-        self.generate_SimpleCoins_for_all_users()
-
-
-class User:
-    id = 1  # temporary id to identify Users to be replaced with public key
-
-    def __init__(self, name):
-        self.name = name
-        self.id = User.id
-        User.id += 1
+        self.create_sample_wallets()
+        self.generate_SimpleCoins_for_all_wallets()
 
 class Wallet:
 
-    def __init__(self):
+    def __init__(self, name):
+        self.name = name
         sk = ecdsa.SigningKey.generate(curve=ecdsa.SECP256k1)
         self.private_key = sk.to_string().hex()
         vk = sk.get_verifying_key()
         self.public_key = base64.b64encode(bytes.fromhex(vk.to_string().hex()))
-        print("Private key:  " + str(self.private_key) + " and public key: " + str(self.public_key))
+        print("Public key: " + str(self.public_key))
 
 
 blockchain = Blockchain()
@@ -195,17 +195,24 @@ blockchain.check_balance(1)
 blockchain.check_balance(2)
 blockchain.check_balance(3)
 print("----")
-blockchain.new_transaction(1, 2, 1)     # User 1 sends Coin 1 to User 2
-blockchain.new_transaction(1, 2, 1)     # User 1 sends Coin 1 to User 2 again - error
-blockchain.new_transaction(2, 1, 1)     # User 2 sends Coin 1 to User 1
-blockchain.new_transaction(2, 1, 1)     # User 2 sends Coin 1 to User 1 again - error
-blockchain.new_transaction(2, 1, 2)     # User 2 sends Coin 2 to User 1
-# blockchain.new_transaction(1, 2, 1)     # User 1 sends Coin 1 to User 2
-# blockchain.new_transaction(1, 2, 2)     # User 1 sends Coin 2 to User 2
-print("----")
-blockchain.mine()
-blockchain.check_balance(1)
-blockchain.check_balance(2)
-blockchain.check_balance(3)
 
-print("Last block's hash contains 00 at the start: " + blockchain.last_block.block_hash)
+walletKamil = blockchain.wallets[0]
+walletPiotr = blockchain.wallets[1]
+walletZofia = blockchain.wallets[2]
+
+print(walletKamil.public_key)
+
+blockchain.new_transaction(walletKamil.public_key, walletKamil.public_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2
+# blockchain.new_transaction(1, 2, 1)     # User 1 sends Coin 1 to User 2 again - error
+# blockchain.new_transaction(2, 1, 1)     # User 2 sends Coin 1 to User 1
+# blockchain.new_transaction(2, 1, 1)     # User 2 sends Coin 1 to User 1 again - error
+# blockchain.new_transaction(2, 1, 2)     # User 2 sends Coin 2 to User 1
+# # blockchain.new_transaction(1, 2, 1)     # User 1 sends Coin 1 to User 2
+# # blockchain.new_transaction(1, 2, 2)     # User 1 sends Coin 2 to User 2
+# print("----")
+# blockchain.mine()
+# blockchain.check_balance(1)
+# blockchain.check_balance(2)
+# blockchain.check_balance(3)
+
+# print("Last block's hash contains 00 at the start: " + blockchain.last_block.block_hash)
