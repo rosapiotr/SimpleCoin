@@ -1,7 +1,8 @@
+import base64
 import hashlib
 import json
 import time
-
+import ecdsa
 
 class Block:
     def __init__(self, index, transaction_list, timestamp, previous_hash, nonce=0):
@@ -65,11 +66,14 @@ class Blockchain:
     def add_user(self, user):
         self.users.append(user)
 
-    def new_transaction(self, sender, recipient, coin_id):
+    def new_transaction(self, sender_public_key, sender_private_key, recipient_public_key, coin_id):
+        signature, message = self.sign_message(sender_private_key)
         transaction = {
-            'sender': sender,
-            'recipient': recipient,
+            'sender': sender_public_key,
+            'recipient': recipient_public_key,
             'coin_id': coin_id,
+            "signature": signature.decode(),
+            "message": message
         }
         if self.validate_transaction(transaction):
             self.current_transactions.append(transaction)
@@ -77,6 +81,12 @@ class Blockchain:
         return False
 
     def validate_transaction(self, transaction):
+        public_key = (base64.b64decode(transaction["sender"])).hex()
+        signature = base64.b64decode(transaction["signature"])
+        vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(public_key), curve=ecdsa.SECP256k1)
+
+        if not vk.verify(signature, transaction["message"].encode()):
+            return False
         if transaction["sender"] == transaction["recipient"]:
             print("You can't send coin to yourself!")
             return False
@@ -121,6 +131,13 @@ class Blockchain:
               " SimpleCoin(s): " + str(sorted(coin_ids)))
         return coin_ids
 
+    def sign_message(self,private_key):
+        message = str(round(time.time()))
+        bmessage = message.encode()
+        sk = ecdsa.SigningKey.from_string(bytes.fromhex(private_key), curve=ecdsa.SECP256k1)
+        signature = base64.b64encode(sk.sign(bmessage))
+        return signature, message
+
     def create_sample_users(self):
         userKamil = User("Kamil")
         userPiotr = User("Piotr")
@@ -162,6 +179,15 @@ class User:
         self.name = name
         self.id = User.id
         User.id += 1
+
+class Wallet:
+
+    def __init__(self):
+        sk = ecdsa.SigningKey.generate(curve=ecdsa.SECP256k1)
+        self.private_key = sk.to_string().hex()
+        vk = sk.get_verifying_key()
+        self.public_key = base64.b64encode(bytes.fromhex(vk.to_string().hex()))
+        print("Private key:  " + str(self.private_key) + " and public key: " + str(self.public_key))
 
 
 blockchain = Blockchain()
