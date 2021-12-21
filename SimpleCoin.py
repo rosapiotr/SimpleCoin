@@ -1,4 +1,5 @@
 import base64
+import binascii
 import hashlib
 import json
 import time
@@ -16,7 +17,6 @@ class Block:
         self.block_hash = self.calcuate_block_hash()
 
     def calcuate_block_hash(self):
-        #print("BLC " + str(self.block_content))
         return hashlib.sha256(json.dumps(self.block_content, sort_keys=True).encode()).hexdigest()
 
 
@@ -48,7 +48,7 @@ class Blockchain:
             new_block.block_content["nonce"] += 1
         new_block.block_hash = new_block.calcuate_block_hash()
         self.add_block(new_block, new_block.block_hash)
-        self.unconfirmed_transactions = []
+        self.current_transactions = []
         return True
 
     def add_block(self, block, proof):
@@ -61,31 +61,43 @@ class Blockchain:
 
     def check_integrity(self):
         for i in range(1, len(self.chain)):
+            # check if signatures in all blocks are valid
+            for transaction in self.chain[i].block_content["transaction_list"]:
+                if not self.validate_signature(transaction=transaction):
+                    print("Signature does not match in transaction " + str(transaction))
+                    return False
+            # check if previous_hash equals to block_hash and if block_hash is equal to actual hash
             if self.chain[i-1].block_hash != self.chain[i].block_content["previous_hash"] or self.chain[i].block_hash != self.chain[i].calcuate_block_hash():
+                print("Blockchain is not valid")
                 return False
+            
         return True
 
     def add_wallet(self, wallet):
         self.wallets.append(wallet)
 
-    def new_transaction(self, sender_public_key, sender_private_key, recipient_public_key, coin_id):
+    def new_transaction(self, sender, recipient, coin_id):
         transaction = {
-            'sender': sender_public_key,
-            'recipient': recipient_public_key,
+            'sender': sender.public_key,
+            'recipient': recipient.public_key,
             'coin_id': coin_id
         }
-        transaction["signature"] = self.sign_transaction(transaction, sender_private_key)
+        transaction["signature"] = sender.sign_transaction(transaction)
         if self.validate_transaction(transaction):
             self.current_transactions.append(transaction)
             return True
         return False
 
-    def validate_transaction(self, transaction):
+    def validate_signature(self, transaction):
         transaction_copy = transaction.copy()
         public_key = transaction_copy["sender"]
         signature_encoded = transaction_copy.pop("signature", None)
         if signature_encoded is None:
             print("The transaction is not signed")
+            return False
+        try:
+            signature = base64.b64decode(signature_encoded)
+        except binascii.Error:
             return False
         signature = base64.b64decode(signature_encoded)
         transaction_copy_bytes = self.transaction_to_bytes(transaction_copy)
@@ -94,8 +106,25 @@ class Blockchain:
         if not vk.verify(signature, transaction_copy_bytes):
             print("Signature does not match the transaction")
             return False
+        return True
+
+    def validate_initial_coins(self):
+        for transaction in self.chain[1].block_content["transaction_list"]:
+            # check if sender in initial block is blockchain
+            if transaction["sender"] != self.bc_wallet.public_key :
+                print("Sender is not BLOCKCHAIN in initial block in transaction: " + str(transaction))
+                return False
+            # validity of signatures in initial block
+            if not self.validate_signature(transaction=transaction):
+                    print("Signature does not match in transaction " + str(transaction))
+                    return False
+        return True
+
+    def validate_transaction(self, transaction):
         if transaction["sender"] == transaction["recipient"]:
             print("You can't send coin to yourself!")
+            return False
+        if not self.validate_signature(transaction):
             return False
         does_have_coin_id = False
         for i in range(1, len(self.chain)):
@@ -140,13 +169,6 @@ class Blockchain:
     def transaction_to_bytes(self, transaction):
         return json.dumps(transaction, sort_keys=True).encode()
 
-    def sign_transaction(self, transaction, private_key):
-        print("Signing transaction " + str(transaction))
-        transaction_bytes = self.transaction_to_bytes(transaction)
-        sk = ecdsa.SigningKey.from_string(bytes.fromhex(private_key), curve=ecdsa.SECP256k1)
-        signature = base64.b64encode(sk.sign(transaction_bytes)).decode("utf-8")
-        return signature
-
     def create_sample_wallets(self):
         walletKamil = Wallet("Kamil")
         walletPiotr = Wallet("Piotr")
@@ -161,21 +183,21 @@ class Blockchain:
             "recipient": self.wallets[0].public_key,     # Kamil
             "coin_id": 1
         }
-        initialTransaction1["signature"] = self.sign_transaction(initialTransaction1, self.bc_wallet.private_key)
+        initialTransaction1["signature"] = self.bc_wallet.sign_transaction(initialTransaction1)
 
         initialTransaction2 = {
             "sender": self.bc_wallet.public_key,
             "recipient": self.wallets[1].public_key,     # Piotr
             "coin_id": 2
         }
-        initialTransaction2["signature"] = self.sign_transaction(initialTransaction2, self.bc_wallet.private_key)
+        initialTransaction2["signature"] = self.bc_wallet.sign_transaction(initialTransaction2)
 
         initialTransaction3 = {
             "sender": self.bc_wallet.public_key,
             "recipient": self.wallets[2].public_key,     # Zofia
             "coin_id": 3
         }
-        initialTransaction3["signature"] = self.sign_transaction(initialTransaction3, self.bc_wallet.private_key)
+        initialTransaction3["signature"] = self.bc_wallet.sign_transaction(initialTransaction3)
 
         block = Block(self.last_block.block_content["index"] + 1,
                       [initialTransaction1, initialTransaction2, initialTransaction3], time.time(), self.last_block.block_hash)
@@ -191,10 +213,18 @@ class Wallet:
     def __init__(self, name):
         self.name = name
         sk = ecdsa.SigningKey.generate(curve=ecdsa.SECP256k1)
-        self.private_key = sk.to_string().hex()
+        self.__private_key = sk.to_string().hex()
         vk = sk.get_verifying_key()
         self.public_key = vk.to_string().hex()
-        print("Public key: " + str(self.public_key))
+
+    def sign_transaction(self, transaction):
+        transaction_bytes = self.transaction_to_bytes(transaction)
+        sk = ecdsa.SigningKey.from_string(bytes.fromhex(self.__private_key), curve=ecdsa.SECP256k1)
+        signature = base64.b64encode(sk.sign(transaction_bytes)).decode("utf-8")
+        return signature
+
+    def transaction_to_bytes(self, transaction):
+        return json.dumps(transaction, sort_keys=True).encode()
 
 blockchain = Blockchain()
 walletKamil = blockchain.wallets[0]
@@ -206,17 +236,25 @@ blockchain.check_balance(walletPiotr.public_key)
 blockchain.check_balance(walletZofia.public_key)
 print("----")
 
-blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2
-blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2 again - error
-blockchain.new_transaction(walletPiotr.public_key, walletPiotr.private_key, walletKamil.public_key, 1)     # User 2 sends Coin 1 to User 1
-blockchain.new_transaction(walletPiotr.public_key, walletPiotr.private_key, walletKamil.public_key, 1)     # User 2 sends Coin 1 to User 1 again - error
-blockchain.new_transaction(walletPiotr.public_key, walletPiotr.private_key, walletKamil.public_key, 2)     # User 2 sends Coin 2 to User 1
-blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)
-blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 2)
+blockchain.new_transaction(walletKamil, walletPiotr, 1)     # walletKamil sends Coin 1 to walletPiotr
+blockchain.new_transaction(walletKamil, walletPiotr, 1)     # walletKamil sends Coin 1 to walletPiotr again - error
+blockchain.mine()
+blockchain.check_balance(walletKamil.public_key)
+blockchain.check_balance(walletPiotr.public_key)
+print("----")
+blockchain.new_transaction(walletPiotr, walletKamil, 1)     # walletPiotr sends Coin 1 to walletKamil
+blockchain.new_transaction(walletPiotr, walletKamil, 2)     # walletPiotr sends Coin 2 to walletKamil
+blockchain.new_transaction(walletZofia, walletKamil, 3)     # walletZofia sends Coin 3 to walletKamil
 print("----")
 blockchain.mine()
 blockchain.check_balance(walletKamil.public_key)
 blockchain.check_balance(walletPiotr.public_key)
 blockchain.check_balance(walletZofia.public_key)
+print("----")
 
-print("Last block's hash contains 00 at the start: " + blockchain.last_block.block_hash)
+blockchain.validate_initial_coins()
+blockchain.check_integrity()    # includes validation of signatures
+print("----")
+
+blockchain.chain[3].block_content["transaction_list"][0]["signature"] = "faked_signature"
+blockchain.check_integrity()    # includes valiadtion of signatures
