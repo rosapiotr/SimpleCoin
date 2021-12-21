@@ -16,7 +16,7 @@ class Block:
         self.block_hash = self.calcuate_block_hash()
 
     def calcuate_block_hash(self):
-        print("BLC " + str(self.block_content))
+        #print("BLC " + str(self.block_content))
         return hashlib.sha256(json.dumps(self.block_content, sort_keys=True).encode()).hexdigest()
 
 
@@ -144,7 +144,7 @@ class Blockchain:
         print("Signing transaction " + str(transaction))
         transaction_bytes = self.transaction_to_bytes(transaction)
         sk = ecdsa.SigningKey.from_string(bytes.fromhex(private_key), curve=ecdsa.SECP256k1)
-        signature = base64.b64encode(sk.sign(transaction_bytes))
+        signature = base64.b64encode(sk.sign(transaction_bytes)).decode("utf-8")
         return signature
 
     def create_sample_wallets(self):
@@ -208,16 +208,16 @@ walletPiotr = blockchain.wallets[1]
 walletZofia = blockchain.wallets[2]
 
 blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2
-# blockchain.new_transaction(1, 2, 1)     # User 1 sends Coin 1 to User 2 again - error
-# blockchain.new_transaction(2, 1, 1)     # User 2 sends Coin 1 to User 1
-# blockchain.new_transaction(2, 1, 1)     # User 2 sends Coin 1 to User 1 again - error
-# blockchain.new_transaction(2, 1, 2)     # User 2 sends Coin 2 to User 1
-# # blockchain.new_transaction(1, 2, 1)     # User 1 sends Coin 1 to User 2
-# # blockchain.new_transaction(1, 2, 2)     # User 1 sends Coin 2 to User 2
-# print("----")
-# blockchain.mine()
-# blockchain.check_balance(1)
-# blockchain.check_balance(2)
-# blockchain.check_balance(3)
+blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2 again - error
+blockchain.new_transaction(walletPiotr.public_key, walletPiotr.private_key, walletKamil.public_key, 1)     # User 2 sends Coin 1 to User 1
+blockchain.new_transaction(walletPiotr.public_key, walletPiotr.private_key, walletKamil.public_key, 1)     # User 2 sends Coin 1 to User 1 again - error
+blockchain.new_transaction(walletPiotr.public_key, walletPiotr.private_key, walletKamil.public_key, 2)     # User 2 sends Coin 2 to User 1
+blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)
+blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 2)
+print("----")
+blockchain.mine()
+blockchain.check_balance(1)
+blockchain.check_balance(2)
+blockchain.check_balance(3)
 
-# print("Last block's hash contains 00 at the start: " + blockchain.last_block.block_hash)
+print("Last block's hash contains 00 at the start: " + blockchain.last_block.block_hash)
