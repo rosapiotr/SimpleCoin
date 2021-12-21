@@ -89,7 +89,7 @@ class Blockchain:
         transaction_copy_bytes = self.transaction_to_bytes(transaction_copy)
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(public_key), curve=ecdsa.SECP256k1)
 
-        if not vk.verify(transaction_copy_bytes, signature, public_key):
+        if not vk.verify(signature, transaction_copy_bytes):
             print("Signature does not match the transaction")
             return False
         if transaction["sender"] == transaction["recipient"]:
