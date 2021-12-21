@@ -196,16 +196,15 @@ class Wallet:
         self.public_key = vk.to_string().hex()
         print("Public key: " + str(self.public_key))
 
-
 blockchain = Blockchain()
-blockchain.check_balance(1)
-blockchain.check_balance(2)
-blockchain.check_balance(3)
-print("----")
-
 walletKamil = blockchain.wallets[0]
 walletPiotr = blockchain.wallets[1]
 walletZofia = blockchain.wallets[2]
+
+blockchain.check_balance(walletKamil.public_key)
+blockchain.check_balance(walletPiotr.public_key)
+blockchain.check_balance(walletZofia.public_key)
+print("----")
 
 blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2
 blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2 again - error
@@ -216,8 +215,8 @@ blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, wall
 blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 2)
 print("----")
 blockchain.mine()
-blockchain.check_balance(1)
-blockchain.check_balance(2)
-blockchain.check_balance(3)
+blockchain.check_balance(walletKamil.public_key)
+blockchain.check_balance(walletPiotr.public_key)
+blockchain.check_balance(walletZofia.public_key)
 
 print("Last block's hash contains 00 at the start: " + blockchain.last_block.block_hash)
