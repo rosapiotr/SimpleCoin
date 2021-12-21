@@ -16,6 +16,7 @@ class Block:
         self.block_hash = self.calcuate_block_hash()
 
     def calcuate_block_hash(self):
+        print("BLC " + str(self.block_content))
         return hashlib.sha256(json.dumps(self.block_content, sort_keys=True).encode()).hexdigest()
 
 
@@ -24,6 +25,7 @@ class Blockchain:
         self.chain = []
         self.current_transactions = []
         self.wallets = []
+        self.bc_wallet = Wallet("BLOCKCHAIN")
         self.create_first_block()
         self.initiateResources()
 
@@ -80,12 +82,12 @@ class Blockchain:
 
     def validate_transaction(self, transaction):
         transaction_copy = transaction.copy()
-        public_key = (base64.b64decode(transaction_copy["sender"])).hex()
+        public_key = transaction_copy["sender"]
         signature_encoded = transaction_copy.pop("signature", None)
         if signature_encoded is None:
             print("The transaction is not signed")
             return False
-        signature = base64.b64decode(transaction_copy["signature"])
+        signature = base64.b64decode(signature_encoded)
         transaction_copy_bytes = self.transaction_to_bytes(transaction_copy)
         vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(public_key), curve=ecdsa.SECP256k1)
 
@@ -95,7 +97,6 @@ class Blockchain:
         if transaction["sender"] == transaction["recipient"]:
             print("You can't send coin to yourself!")
             return False
-        # changed from int 0 because if chain is vaild, during check it can only take value 0 or 1
         does_have_coin_id = False
         for i in range(1, len(self.chain)):
             transaction_list_in_loop = self.chain[i].block_content["transaction_list"]
@@ -140,7 +141,7 @@ class Blockchain:
         return json.dumps(transaction, sort_keys=True).encode()
 
     def sign_transaction(self, transaction, private_key):
-        print(transaction)
+        print("Signing transaction " + str(transaction))
         transaction_bytes = self.transaction_to_bytes(transaction)
         sk = ecdsa.SigningKey.from_string(bytes.fromhex(private_key), curve=ecdsa.SECP256k1)
         signature = base64.b64encode(sk.sign(transaction_bytes))
@@ -156,20 +157,26 @@ class Blockchain:
 
     def generate_SimpleCoins_for_all_wallets(self):
         initialTransaction1 = {
-            "sender": 0,
-            "recipient": 1,     # Kamil
+            "sender": self.bc_wallet.public_key,
+            "recipient": self.wallets[0].public_key,     # Kamil
             "coin_id": 1
         }
+        initialTransaction1["signature"] = self.sign_transaction(initialTransaction1, self.bc_wallet.private_key)
+
         initialTransaction2 = {
-            "sender": 0,
-            "recipient": 2,     # Piotr
+            "sender": self.bc_wallet.public_key,
+            "recipient": self.wallets[1].public_key,     # Piotr
             "coin_id": 2
         }
+        initialTransaction2["signature"] = self.sign_transaction(initialTransaction2, self.bc_wallet.private_key)
+
         initialTransaction3 = {
-            "sender": 0,
-            "recipient": 3,     # Zofia
+            "sender": self.bc_wallet.public_key,
+            "recipient": self.wallets[2].public_key,     # Zofia
             "coin_id": 3
         }
+        initialTransaction3["signature"] = self.sign_transaction(initialTransaction3, self.bc_wallet.private_key)
+
         block = Block(self.last_block.block_content["index"] + 1,
                       [initialTransaction1, initialTransaction2, initialTransaction3], time.time(), self.last_block.block_hash)
         self.add_block(block, block.block_hash)
@@ -186,7 +193,7 @@ class Wallet:
         sk = ecdsa.SigningKey.generate(curve=ecdsa.SECP256k1)
         self.private_key = sk.to_string().hex()
         vk = sk.get_verifying_key()
-        self.public_key = base64.b64encode(bytes.fromhex(vk.to_string().hex()))
+        self.public_key = vk.to_string().hex()
         print("Public key: " + str(self.public_key))
 
 
@@ -200,9 +207,7 @@ walletKamil = blockchain.wallets[0]
 walletPiotr = blockchain.wallets[1]
 walletZofia = blockchain.wallets[2]
 
-print(walletKamil.public_key)
-
-blockchain.new_transaction(walletKamil.public_key, walletKamil.public_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2
+blockchain.new_transaction(walletKamil.public_key, walletKamil.private_key, walletPiotr.public_key, 1)     # User 1 sends Coin 1 to User 2
 # blockchain.new_transaction(1, 2, 1)     # User 1 sends Coin 1 to User 2 again - error
 # blockchain.new_transaction(2, 1, 1)     # User 2 sends Coin 1 to User 1
 # blockchain.new_transaction(2, 1, 1)     # User 2 sends Coin 1 to User 1 again - error
