@@ -7,6 +7,9 @@ from urllib import response
 import ecdsa
 from numpy import block
 import random
+from queue import Queue
+import multiprocessing
+import threading
 
 class Block:
     def __init__(self, index, transaction_list, timestamp, previous_hash, nonce=0):
@@ -169,6 +172,11 @@ class Blockchain:
     def transaction_to_bytes(self, transaction):
         return json.dumps(transaction, sort_keys=True).encode()
 
+    #TODO:
+    def mineBlock(self, minerPublickKey, minerPrivateKey ):
+
+        #add reward
+
 
 class Wallet:
 
@@ -195,7 +203,8 @@ class User:
         self.wallet = Wallet(name)
         self.blockchain = Blockchain(blockchain_wallet)
         self.nodes = []
-    
+        self.proposedBlock: Block = None
+
     def add_node(self, node):
         self.nodes.append(node)
 
@@ -210,6 +219,17 @@ class User:
                         print("Node " + node.name + " did not accept a transaction")
             return True
         return False
+
+    def mineBlock(self, results):
+        self.proposedBlock = self.blockchain.mineBlock(self.public_key, self.private_key)
+        results.put((self.name, self.proposedBlock))
+
+    #TODO:
+    def broadcast(self, proposed_block):
+        self.proposed_block = proposed_block
+
+    #TODO:
+    def appendBlock(self, block: Block):
 
 
 def generate_genesis_block(users):
@@ -253,8 +273,23 @@ users["Piotr"].new_transaction(users["Kamil"].wallet, 2)     # walletPiotr sends
 users["Zofia"].new_transaction(users["Kamil"].wallet, 3)     # walletPiotr sends Coin 1 to walletKamil
 
 print("----")
-users["Piotr"].blockchain.mine()    # make it run in parallel 
+threads = []
+results = Queue()
 
+for user in users:
+    thread = threading.Thread(target=users[user].mineBlock, args=[results])
+    thread.start()
+    threads.append(thread)
+winningResults = results.get()
+for thread in threads:
+    thread.join()
+
+users[winningResults[0]].broadcast(winningResults[1])
+for user in users:
+    users[user].blockchain.check_balance(users[user].wallet.public_key)
+
+
+#users["Piotr"].blockchain.mine()    # make it run in parallel
 
 # blockchain.new_transaction(walletPiotr, walletKamil, 2)     # walletPiotr sends Coin 2 to walletKamil
 # blockchain.new_transaction(walletZofia, walletKamil, 3)     # walletZofia sends Coin 3 to walletKamil
