@@ -37,9 +37,9 @@ class Blockchain:
     def last_block(self):
         return self.chain[-1]
 
-    def mine(self, difficulty_bits = 4):
+    def mine(self, difficulty_bits = 3):
         if not self.current_transactions:
-            return False
+            return None
 
         new_block = Block(self.last_block.block_content["index"] + 1, self.current_transactions, timestamp=time.time(),
                           previous_hash=self.last_block.block_hash)
@@ -47,9 +47,7 @@ class Blockchain:
         while not new_block.calcuate_block_hash().startswith(difficulty_bits*'0'):
             new_block.block_content["nonce"] += 1
         new_block.block_hash = new_block.calcuate_block_hash()
-        self.add_block(new_block, new_block.block_hash)
-        self.current_transactions = []
-        return True
+        return new_block
 
     def add_block(self, block, proof):
         previous_hash = self.last_block.block_hash
@@ -58,6 +56,10 @@ class Blockchain:
             return False
         self.chain.append(block)
         return True
+
+    def add_proposed_block(self, new_block):
+        self.add_block(new_block, new_block.block_hash)
+        self.current_transactions = []
 
     def add_genesis_block(self, block):
         self.chain.append(block)
@@ -172,11 +174,6 @@ class Blockchain:
     def transaction_to_bytes(self, transaction):
         return json.dumps(transaction, sort_keys=True).encode()
 
-    #TODO:
-    def mineBlock(self, minerPublickKey, minerPrivateKey ):
-
-        #add reward
-
 
 class Wallet:
 
@@ -203,7 +200,6 @@ class User:
         self.wallet = Wallet(name)
         self.blockchain = Blockchain(blockchain_wallet)
         self.nodes = []
-        self.proposedBlock: Block = None
 
     def add_node(self, node):
         self.nodes.append(node)
@@ -221,16 +217,33 @@ class User:
         return False
 
     def mineBlock(self, results):
-        self.proposedBlock = self.blockchain.mineBlock(self.public_key, self.private_key)
-        results.put((self.name, self.proposedBlock))
+        new_block = self.blockchain.mine()
+        if new_block is None:
+            return
+        results.put((self.name, new_block))
 
-    #TODO:
-    def broadcast(self, proposed_block):
-        self.proposed_block = proposed_block
+    def consensus(self, proposed_block):
+        if self.blockchain.last_block.block_hash != proposed_block.block_content["previous_hash"] or proposed_block.block_hash != proposed_block.calcuate_block_hash():
+            print("Failed to add a new block")
+            return False
+        return True
 
-    #TODO:
-    def appendBlock(self, block: Block):
+    def broadcast_block(self, proposed_block):
+        is_block_accepted = True
+        if not self.consensus(proposed_block):
+            is_block_accepted = False
+        for node in self.nodes:
+            if not node.consensus(proposed_block):
+                is_block_accepted = False
+        if not is_block_accepted:
+            print("Not all nodes accepted the new block")
+            return
+        self.append_block(proposed_block)
+        for node in self.nodes:
+            node.append_block(proposed_block)
 
+    def append_block(self, proposed_block: Block):
+        self.blockchain.add_proposed_block(proposed_block)
 
 def generate_genesis_block(users):
     initial_transactions = []
@@ -238,7 +251,7 @@ def generate_genesis_block(users):
     for user in users:
         initialTransaction = {
             "sender": users[user].blockchain.bc_wallet.public_key,
-            "recipient": users[user].wallet.public_key,     # Kamil
+            "recipient": users[user].wallet.public_key,
             "coin_id": coin_counter
         }
         initialTransaction["signature"] = users[user].blockchain.bc_wallet.sign_transaction(initialTransaction)
@@ -260,17 +273,16 @@ genesis_block = generate_genesis_block(users)
 for user in users:
     users[user].blockchain.add_genesis_block(genesis_block)
 
-users["Piotr"].blockchain.check_balance(users["Piotr"].wallet.public_key)
-users["Piotr"].blockchain.check_balance(users["Kamil"].wallet.public_key)
-users["Zofia"].blockchain.check_balance(users["Zofia"].wallet.public_key)
+for user in users:
+    users[user].blockchain.check_balance(users[user].wallet.public_key)
 
 for user in users:
     for userNode in users:
         if user != userNode:
             users[user].add_node(users[userNode])
 
-users["Piotr"].new_transaction(users["Kamil"].wallet, 2)     # walletPiotr sends Coin 1 to walletKamil
-users["Zofia"].new_transaction(users["Kamil"].wallet, 3)     # walletPiotr sends Coin 1 to walletKamil
+users["Piotr"].new_transaction(users["Kamil"].wallet, 2)     # walletPiotr sends Coin 2 to walletKamil
+users["Zofia"].new_transaction(users["Kamil"].wallet, 3)     # walletPiotr sends Coin 3 to walletKamil
 
 print("----")
 threads = []
@@ -284,19 +296,9 @@ winningResults = results.get()
 for thread in threads:
     thread.join()
 
-users[winningResults[0]].broadcast(winningResults[1])
+print(winningResults[1].block_content["transaction_list"])
+
+users[winningResults[0]].broadcast_block(winningResults[1])
 for user in users:
     users[user].blockchain.check_balance(users[user].wallet.public_key)
-
-
-#users["Piotr"].blockchain.mine()    # make it run in parallel
-
-# blockchain.new_transaction(walletPiotr, walletKamil, 2)     # walletPiotr sends Coin 2 to walletKamil
-# blockchain.new_transaction(walletZofia, walletKamil, 3)     # walletZofia sends Coin 3 to walletKamil
-# print("----")
-# blockchain.mine()
-# blockchain.check_balance(walletKamil.public_key)
-# blockchain.check_balance(walletPiotr.public_key)
-# blockchain.check_balance(walletZofia.public_key)
-# print("----")
 
