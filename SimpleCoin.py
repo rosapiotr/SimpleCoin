@@ -3,7 +3,10 @@ import binascii
 import hashlib
 import json
 import time
+from urllib import response
 import ecdsa
+from numpy import block
+import random
 
 class Block:
     def __init__(self, index, transaction_list, timestamp, previous_hash, nonce=0):
@@ -21,30 +24,24 @@ class Block:
 
 
 class Blockchain:
-    def __init__(self):
+    def __init__(self, blockchain_wallet):
         self.chain = []
         self.current_transactions = []
         self.wallets = []
-        self.bc_wallet = Wallet("BLOCKCHAIN")
-        self.create_first_block()
-        self.initiateResources()
-
-    def create_first_block(self):
-        first_block = Block(0, [], time.time(), "0")
-        self.chain.append(first_block)
+        self.bc_wallet = blockchain_wallet
 
     @property
     def last_block(self):
         return self.chain[-1]
 
-    def mine(self):
+    def mine(self, difficulty_bits = 4):
         if not self.current_transactions:
             return False
 
         new_block = Block(self.last_block.block_content["index"] + 1, self.current_transactions, timestamp=time.time(),
                           previous_hash=self.last_block.block_hash)
 
-        while not new_block.calcuate_block_hash().startswith('00'):
+        while not new_block.calcuate_block_hash().startswith(difficulty_bits*'0'):
             new_block.block_content["nonce"] += 1
         new_block.block_hash = new_block.calcuate_block_hash()
         self.add_block(new_block, new_block.block_hash)
@@ -56,6 +53,10 @@ class Blockchain:
         if previous_hash != block.block_content["previous_hash"] or block.block_hash != proof:
             print("Failed to add a new block")
             return False
+        self.chain.append(block)
+        return True
+
+    def add_genesis_block(self, block):
         self.chain.append(block)
         return True
 
@@ -84,9 +85,14 @@ class Blockchain:
         }
         transaction["signature"] = sender.sign_transaction(transaction)
         if self.validate_transaction(transaction):
+            print("Transaction: Coin with ID " + str(transaction["coin_id"]) + ", from " + str(transaction["sender"]) +
+                  " to " + str(transaction["recipient"]) + " was successful!")
             self.current_transactions.append(transaction)
-            return True
-        return False
+            return transaction
+        else:
+            print("You (ID: " + str(transaction["sender"]) +
+                  ") don't have coin with ID: " + str(transaction["coin_id"]))
+            return None
 
     def validate_signature(self, transaction):
         transaction_copy = transaction.copy()
@@ -109,7 +115,7 @@ class Blockchain:
         return True
 
     def validate_initial_coins(self):
-        for transaction in self.chain[1].block_content["transaction_list"]:
+        for transaction in self.chain[0].block_content["transaction_list"]:
             # check if sender in initial block is blockchain
             if transaction["sender"] != self.bc_wallet.public_key :
                 print("Sender is not BLOCKCHAIN in initial block in transaction: " + str(transaction))
@@ -127,7 +133,7 @@ class Blockchain:
         if not self.validate_signature(transaction):
             return False
         does_have_coin_id = False
-        for i in range(1, len(self.chain)):
+        for i in range(0, len(self.chain)):
             transaction_list_in_loop = self.chain[i].block_content["transaction_list"]
             for j in range(0, len(transaction_list_in_loop)):
                 if transaction_list_in_loop[j]["recipient"] == transaction["sender"] and transaction_list_in_loop[j]["coin_id"] == transaction["coin_id"]:
@@ -139,17 +145,11 @@ class Blockchain:
                 does_have_coin_id = True
             if self.current_transactions[i]["sender"] == transaction["sender"] and self.current_transactions[i]["coin_id"] == transaction["coin_id"]:
                 does_have_coin_id = False
-        if does_have_coin_id:
-            print("Transaction: Coin with ID " + str(transaction["coin_id"]) + ", from " + str(transaction["sender"]) +
-                  " to " + str(transaction["recipient"]) + " was successful!")
-        else:
-            print("You (ID: " + str(transaction["sender"]) +
-                  ") don't have coin with ID: " + str(transaction["coin_id"]))
         return does_have_coin_id
 
     def check_balance(self, wallet_public_key):
         coin_ids = set()
-        for i in range(1, len(self.chain)):
+        for i in range(0, len(self.chain)):
             transaction_list_in_loop = self.chain[i].block_content["transaction_list"]
             for j in range(0, len(transaction_list_in_loop)):
                 if transaction_list_in_loop[j]["recipient"] == wallet_public_key:
@@ -169,44 +169,6 @@ class Blockchain:
     def transaction_to_bytes(self, transaction):
         return json.dumps(transaction, sort_keys=True).encode()
 
-    def create_sample_wallets(self):
-        walletKamil = Wallet("Kamil")
-        walletPiotr = Wallet("Piotr")
-        walletZofia = Wallet("Zofia")
-        self.add_wallet(walletKamil)
-        self.add_wallet(walletPiotr)
-        self.add_wallet(walletZofia)
-
-    def generate_SimpleCoins_for_all_wallets(self):
-        initialTransaction1 = {
-            "sender": self.bc_wallet.public_key,
-            "recipient": self.wallets[0].public_key,     # Kamil
-            "coin_id": 1
-        }
-        initialTransaction1["signature"] = self.bc_wallet.sign_transaction(initialTransaction1)
-
-        initialTransaction2 = {
-            "sender": self.bc_wallet.public_key,
-            "recipient": self.wallets[1].public_key,     # Piotr
-            "coin_id": 2
-        }
-        initialTransaction2["signature"] = self.bc_wallet.sign_transaction(initialTransaction2)
-
-        initialTransaction3 = {
-            "sender": self.bc_wallet.public_key,
-            "recipient": self.wallets[2].public_key,     # Zofia
-            "coin_id": 3
-        }
-        initialTransaction3["signature"] = self.bc_wallet.sign_transaction(initialTransaction3)
-
-        block = Block(self.last_block.block_content["index"] + 1,
-                      [initialTransaction1, initialTransaction2, initialTransaction3], time.time(), self.last_block.block_hash)
-        self.add_block(block, block.block_hash)
-        print("Generation completed!")
-
-    def initiateResources(self):
-        self.create_sample_wallets()
-        self.generate_SimpleCoins_for_all_wallets()
 
 class Wallet:
 
@@ -226,35 +188,80 @@ class Wallet:
     def transaction_to_bytes(self, transaction):
         return json.dumps(transaction, sort_keys=True).encode()
 
-blockchain = Blockchain()
-walletKamil = blockchain.wallets[0]
-walletPiotr = blockchain.wallets[1]
-walletZofia = blockchain.wallets[2]
+class User:
 
-blockchain.check_balance(walletKamil.public_key)
-blockchain.check_balance(walletPiotr.public_key)
-blockchain.check_balance(walletZofia.public_key)
-print("----")
+    def __init__(self, name, blockchain_wallet):
+        self.name = name
+        self.wallet = Wallet(name)
+        self.blockchain = Blockchain(blockchain_wallet)
+        self.nodes = []
+    
+    def add_node(self, node):
+        self.nodes.append(node)
 
-blockchain.new_transaction(walletKamil, walletPiotr, 1)     # walletKamil sends Coin 1 to walletPiotr
-blockchain.new_transaction(walletKamil, walletPiotr, 1)     # walletKamil sends Coin 1 to walletPiotr again - error
-blockchain.mine()
-blockchain.check_balance(walletKamil.public_key)
-blockchain.check_balance(walletPiotr.public_key)
-print("----")
-blockchain.new_transaction(walletPiotr, walletKamil, 1)     # walletPiotr sends Coin 1 to walletKamil
-blockchain.new_transaction(walletPiotr, walletKamil, 2)     # walletPiotr sends Coin 2 to walletKamil
-blockchain.new_transaction(walletZofia, walletKamil, 3)     # walletZofia sends Coin 3 to walletKamil
-print("----")
-blockchain.mine()
-blockchain.check_balance(walletKamil.public_key)
-blockchain.check_balance(walletPiotr.public_key)
-blockchain.check_balance(walletZofia.public_key)
-print("----")
+    def new_transaction(self, recipient_wallet, coin_id): 
+        transaction = self.blockchain.new_transaction(self.wallet, recipient_wallet, coin_id)
+        if transaction is not None:
+            for node in self.nodes:
+                if random.random() < 0.9:
+                    if node.blockchain.validate_transaction(transaction):
+                        node.blockchain.current_transactions.append(transaction)
+                    else: 
+                        print("Node " + node.name + " did not accept a transaction")
+            return True
+        return False
 
-blockchain.validate_initial_coins()
-blockchain.check_integrity()    # includes validation of signatures
-print("----")
 
-blockchain.chain[3].block_content["transaction_list"][0]["signature"] = "faked_signature"
-blockchain.check_integrity()    # includes valiadtion of signatures
+def generate_genesis_block(users):
+    initial_transactions = []
+    coin_counter = 1
+    for user in users:
+        initialTransaction = {
+            "sender": users[user].blockchain.bc_wallet.public_key,
+            "recipient": users[user].wallet.public_key,     # Kamil
+            "coin_id": coin_counter
+        }
+        initialTransaction["signature"] = users[user].blockchain.bc_wallet.sign_transaction(initialTransaction)
+        coin_counter += 1
+        initial_transactions.append(initialTransaction)
+
+    block = Block(0, initial_transactions, time.time(), "0")
+    return block
+
+blockchain_wallet = Wallet("BLOCKCHAIN")
+users = {
+    "Kamil": User("Kamil", blockchain_wallet),
+    "Piotr": User("Piotr", blockchain_wallet),
+    "Zofia": User("Zofia", blockchain_wallet)
+}
+
+genesis_block = generate_genesis_block(users)
+
+for user in users:
+    users[user].blockchain.add_genesis_block(genesis_block)
+
+users["Piotr"].blockchain.check_balance(users["Piotr"].wallet.public_key)
+users["Piotr"].blockchain.check_balance(users["Kamil"].wallet.public_key)
+users["Zofia"].blockchain.check_balance(users["Zofia"].wallet.public_key)
+
+for user in users:
+    for userNode in users:
+        if user != userNode:
+            users[user].add_node(users[userNode])
+
+users["Piotr"].new_transaction(users["Kamil"].wallet, 2)     # walletPiotr sends Coin 1 to walletKamil
+users["Zofia"].new_transaction(users["Kamil"].wallet, 3)     # walletPiotr sends Coin 1 to walletKamil
+
+print("----")
+users["Piotr"].blockchain.mine()    # make it run in parallel 
+
+
+# blockchain.new_transaction(walletPiotr, walletKamil, 2)     # walletPiotr sends Coin 2 to walletKamil
+# blockchain.new_transaction(walletZofia, walletKamil, 3)     # walletZofia sends Coin 3 to walletKamil
+# print("----")
+# blockchain.mine()
+# blockchain.check_balance(walletKamil.public_key)
+# blockchain.check_balance(walletPiotr.public_key)
+# blockchain.check_balance(walletZofia.public_key)
+# print("----")
+
